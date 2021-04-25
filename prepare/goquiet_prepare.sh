@@ -1,9 +1,17 @@
 auto_get_ip_of_domain(){
     local domain=$1
+    local ipv4Re="((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])"
     
-    domain_ip=`ping ${domain} -c 1 2>nul | sed '1{s/[^(]*(//;s/).*//;q}'`
-    rm -fr ./nul
-    if [[ ! -z "${domain_ip}" ]]; then
+    if [ ! "$(command -v nslookup)" ]; then
+        if check_sys packageManager yum; then
+            package_install "bind-utils" > /dev/null 2>&1
+        elif check_sys packageManager apt; then
+            package_install "dnsutils" > /dev/null 2>&1
+        fi
+    fi
+
+    domain_ip=`nslookup ${domain} | grep -E 'Name:' -A 1 | grep -oE $ipv4Re | tail -1`
+    if [[ -n "${domain_ip}" ]]; then
         return 0
     else
         return 1
@@ -64,7 +72,6 @@ get_input_webaddr_of_domain(){
 get_input_gqkey(){
     echo
     echo -e "请为GoQuiet输入密钥 [留空以将其设置为16位随机字符串]"
-    echo
     read -e -p "(默认: ${ran_str16}):" gqkey
     [ -z "$gqkey" ] && gqkey=${ran_str16}
     echo

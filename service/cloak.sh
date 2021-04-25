@@ -1,25 +1,25 @@
 #!/usr/bin/env bash
 # chkconfig: 2345 90 10
-# description: A Stable & Secure Tunnel Based On KCP with N:M Multiplexing
+# description: A censorship circumvention tool to evade detection against state adversaries
 
 ### BEGIN INIT INFO
-# Provides:          caddy
+# Provides:          cloak
 # Required-Start:    $network $syslog
 # Required-Stop:     $network
 # Default-Start:     2 3 4 5
 # Default-Stop:      0 1 6
 # Short-Description: It can help you improve network speed
-# Description:       Start or stop the  caddy server
+# Description:       Start or stop the  cloak server
 ### END INIT INFO
 
 
-if [ -f /usr/local/caddy/caddy ]; then
-    DAEMON=/usr/local/caddy/caddy
+if [ -f /usr/local/bin/ck-server ]; then
+    DAEMON=/usr/local/bin/ck-server
 fi
 
-NAME=caddy
-CONF=/usr/local/caddy/Caddyfile
-LOG=/var/log/caddy.log
+NAME=ck-server
+CONF=/etc/cloak/ckserver.json
+LOG=/var/log/cloak.log
 PID_DIR=/var/run
 PID_FILE=$PID_DIR/$NAME.pid
 RET_VAL=0
@@ -27,7 +27,7 @@ RET_VAL=0
 [ -x $DAEMON ] || exit 0
 
 check_pid(){
-	get_pid=`ps -ef |grep -v grep |grep -v "init.d" |grep -v "service" |grep $NAME |awk '{print $2}'`
+	get_pid=`ps -ef |grep -v grep | grep $NAME |awk '{print $2}'`
 }
 
 if [ ! -d "$(dirname ${LOG})" ]; then
@@ -47,11 +47,6 @@ if [ ! -d $PID_DIR ]; then
         echo "Creating PID directory $PID_DIR failed"
         exit 1
     fi
-fi
-
-if $(grep -q 'cloudflare' $CONF); then
-    export CLOUDFLARE_EMAIL=$(cat ~/.api/cf.api | grep "CLOUDFLARE_EMAIL" | cut -d= -f2)
-    export CLOUDFLARE_API_KEY=$(cat ~/.api/cf.api | grep "CLOUDFLARE_API_KEY" | cut -d= -f2)
 fi
 
 if [ ! -f $CONF ]; then
@@ -95,7 +90,7 @@ do_start() {
         return 0
     fi
     ulimit -n 51200
-    nohup "$DAEMON" --conf="$CONF" -agree >> $LOG 2>&1 &
+    nohup $DAEMON -c $CONF -verbosity debug >  $LOG 2>&1 &
     check_pid
     echo $get_pid > $PID_FILE
     if check_running; then

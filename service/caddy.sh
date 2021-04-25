@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# chkconfig: 2345 90 10
+# description: Fast, multi-platform web server with automatic HTTPS
 
 ### BEGIN INIT INFO
 # Provides:          caddy
@@ -6,7 +8,7 @@
 # Required-Stop:     $network
 # Default-Start:     2 3 4 5
 # Default-Stop:      0 1 6
-# Short-Description: A Stable & Secure Tunnel Based On KCP with N:M Multiplexing
+# Short-Description: It can help you improve network speed
 # Description:       Start or stop the  caddy server
 ### END INIT INFO
 
@@ -17,7 +19,6 @@ fi
 
 NAME=caddy
 CONF=/usr/local/caddy/Caddyfile
-LOG=/var/log/caddy.log
 PID_DIR=/var/run
 PID_FILE=$PID_DIR/$NAME.pid
 RET_VAL=0
@@ -27,10 +28,6 @@ RET_VAL=0
 check_pid(){
 	get_pid=`ps -ef |grep -v grep |grep -v "init.d" |grep -v "service" |grep $NAME |awk '{print $2}'`
 }
-
-if [ ! -d "$(dirname ${LOG})" ]; then
-    mkdir -p $(dirname ${LOG})
-fi
 
 check_pid
 if [ -z $get_pid ]; then
@@ -52,10 +49,6 @@ if [ ! -f $CONF ]; then
     exit 1
 fi
 
-if $(grep -q 'cloudflare' $CONF); then
-    export CLOUDFLARE_EMAIL=$(cat ~/.api/cf.api | grep "CLOUDFLARE_EMAIL" | cut -d= -f2)
-    export CLOUDFLARE_API_KEY=$(cat ~/.api/cf.api | grep "CLOUDFLARE_API_KEY" | cut -d= -f2)
-fi
 
 check_running() {
     if [ -e $PID_FILE ]; then
@@ -92,7 +85,7 @@ do_start() {
         return 0
     fi
     ulimit -n 51200
-    nohup "$DAEMON" --conf="$CONF" -agree >> $LOG 2>&1 &
+    nohup "$DAEMON" --conf="$CONF" -agree > /dev/null 2>&1 &
     check_pid
     echo $get_pid > $PID_FILE
     if check_running; then

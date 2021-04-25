@@ -1,3 +1,12 @@
+improt_package "utils" "gen_certificates.sh"
+
+# simple-tls version
+SIMPLE_TLS_VERSION=(
+v0.3.4
+v0.4.7
+LatestRelease
+)
+
 # simple-tls Transport mode
 SIMPLE_TLS_MODE=(
 tls
@@ -5,125 +14,38 @@ wss
 )
 
 
-intall_acme_tool(){
-    # Install certificate generator tools
-    if [ ! -e ~/.acme.sh/acme.sh ]; then
-        echo
-        echo -e "${Info} 开始安装实现了 acme 协议, 可以从 letsencrypt 生成免费的证书的 acme.sh "
-        echo
-        curl  https://get.acme.sh | sh
-        echo
-        echo -e "${Info} acme.sh 安装完成. "
-        echo
-    else
-        echo
-        echo -e "${Info} 证书生成工具 acme.sh 已经安装，自动进入下一步，请选择. "
-        echo
-    fi
-}
-
-acme_get_certificate_by_force(){
-    local domain=$1
-
-    intall_acme_tool
-
-    if [ ! "$(command -v socat)" ]; then
-        echo -e "${Info} 开始安装强制生成时必要的socat 软件包."
-        package_install "socat"
-    fi
-
-    echo
-    echo -e "${Info} 开始生成域名 ${domain} 相关的证书 "
-    echo
-    ~/.acme.sh/acme.sh --issue -d ${domain}   --standalone
-
-    cerPath="/root/.acme.sh/${domain}/fullchain.cer"
-    keyPath="/root/.acme.sh/${domain}/${domain}.key"
-
-    echo
-    echo -e "${Info} ${domain} 证书生成完成. "
-    echo
-}
-
-choose_api_get_mode(){
-    if [[ ! -e ~/.api/cf.api ]]; then
-        get_input_api_info
-    else
-        echo
-        echo -e "检测到${Green}~/.api/cf.api${suffix}文件存在，开始获取API信息."
-        CF_Email=$(cat ~/.api/cf.api | grep "CLOUDFLARE_EMAIL" | cut -d= -f2)
-        CF_Key=$(cat ~/.api/cf.api | grep "CLOUDFLARE_API_KEY" | cut -d= -f2)
-        echo
-        echo -e "${Red}  email = ${CF_Email}${suffix}"
-        echo -e "${Red}  key = ${CF_Key}${suffix}"
-        echo
-    fi
-}
-
-acme_get_certificate_by_api(){
-    local domain=$1
-
-    choose_api_get_mode
-    intall_acme_tool
-
-    echo
-    echo -e "${Info} 开始生成域名 ${domain} 相关的证书 "
-    echo
-    export CF_Key=${CF_Key}
-    export CF_Email=${CF_Email}
-    ~/.acme.sh/acme.sh --issue --dns dns_cf -d ${domain}
-
-    cerPath="/root/.acme.sh/${domain}/fullchain.cer"
-    keyPath="/root/.acme.sh/${domain}/${domain}.key"
-
-    echo
-    echo -e "${Info} ${domain} 证书生成完成. "
-    echo
-}
-
-get_input_api_info(){
+simple_tls_version(){
     while true
     do
+        echo && echo -e "请选择simple-tls安装版本\n"
+        for ((i=1;i<=${#SIMPLE_TLS_VERSION[@]};i++ )); do
+            hint="${SIMPLE_TLS_VERSION[$i-1]}"
+            echo -e "${Green}  ${i}.${suffix} ${hint}"
+        done
         echo
-        read -e -p "请输入Cloudflare用户名(邮箱)：" CF_Email
-        if [ -z "$(echo $CF_Email | grep -E ${EMAIL_RE})" ]; then
+        read -e -p "(默认: ${SIMPLE_TLS_VERSION[2]}):" SimpleTlsVer
+        [ -z "$SimpleTlsVer" ] && SimpleTlsVer=3
+        expr ${SimpleTlsVer} + 1 &>/dev/null
+        if [ $? -ne 0 ]; then
             echo
-            echo -e "${Error} 请输入正确合法的邮箱."
+            echo -e "${Error} 请输入一个数字"
+            echo
+            continue
+        fi
+        if [[ "$SimpleTlsVer" -lt 1 || "$SimpleTlsVer" -gt ${#SIMPLE_TLS_VERSION[@]} ]]; then
+            echo
+            echo -e "${Error} 请输入一个数字在 [1-${#SIMPLE_TLS_VERSION[@]}] 之间"
             echo
             continue
         fi
 
+        stVer=${SIMPLE_TLS_VERSION[$SimpleTlsVer-1]}
         echo
-        echo -e "${Red}  email = ${CF_Email}${suffix}"
+        echo -e "${Red}  version = ${stVer}${suffix}"
         echo
+
         break
     done
-
-    while true
-    do
-        echo
-        read -e -p "请输入Cloudflare - Global API Key：" CF_Key
-        if [[ $(echo ${#CF_Key}) -ne 37 ]]; then
-            echo
-            echo -e "${Error} 请输入正确合法的Global API Key."
-            echo
-            continue
-        fi
-
-        echo
-        echo -e "${Red}  key = ${CF_Key}${suffix}"
-        echo
-        break
-    done
-
-    if [[ ! -e ~/.api ]]; then
-        mkdir -p ~/.api
-    fi
-    local CF_API_FILE=~/.api/cf.api
-    echo "CLOUDFLARE_EMAIL=${CF_Email}" > ${CF_API_FILE}
-    echo "CLOUDFLARE_API_KEY=${CF_Key}" >> ${CF_API_FILE}
-    echo -e "${Tip} 输入的Cloudflare API信息将会存储在~/.api/cf.api"
-    echo
 }
 
 transport_mode_menu(){
@@ -160,77 +82,6 @@ transport_mode_menu(){
     done
 }
 
-get_ip_of_domain(){
-    local domain=$1
-
-    ping -h &>nul
-    cat nul | grep -qE '4|\-4'
-    if [[ $? -eq 0 ]]; then
-        domain_ip=`ping -4 ${domain} -c 1 2>nul | sed '1{s/[^(]*(//;s/).*//;q}'`
-    else
-        domain_ip=`ping ${domain} -c 1 2>nul | sed '1{s/[^(]*(//;s/).*//;q}'`
-    fi
-    rm -fr ./nul
-    if [[ ! -z "${domain_ip}" ]]; then
-        return 0
-    else
-        return 1
-    fi
-}
-
-is_dns_only(){
-    local IP=$1
-
-    echo ${IP} | grep -qP $(get_ip)
-    if [[ $? -eq 0 ]]; then
-        return 0
-    else
-        return 1
-    fi
-}
-
-is_cdn_proxied(){
-    local IP=$1
-    local ipv4_text_list=`curl -s https://www.cloudflare.com/ips-v4`
-    local ipcalc_install_path="/usr/local/bin/ipcalc-0.41"
-    local ipcalc_download_url="http://jodies.de/ipcalc-archive/ipcalc-0.41/ipcalc"
-
-    if centosversion 8; then
-        local ipcalcName='ipcalc'
-    else
-        local ipcalcName='ipcalc-0.41'
-
-        if [ ! -e ${ipcalc_install_path} ]; then
-            wget --no-check-certificate -q -c -t3 -T60 -O ${ipcalc_install_path} ${ipcalc_download_url}
-            if [ $? -ne 0 ]; then
-                echo -e "${Red}[Error]${suffix} Dependency package ipcalc download failed."
-                exit 1
-            fi
-            chmod +x ${ipcalc_install_path}
-            [ -f ${ipcalc_install_path} ] && ln -fs ${ipcalc_install_path} /usr/bin
-        fi
-    fi
-
-    for MASK in ${ipv4_text_list[@]}
-    do
-        min=`$ipcalcName $MASK|awk '/HostMin:/{print $2}'`
-        max=`$ipcalcName $MASK|awk '/HostMax:/{print $2}'`
-        MIN=`echo $min|awk -F"." '{printf"%.0f",$1*256*256*256+$2*256*256+$3*256+$4}'`
-        MAX=`echo $max|awk -F"." '{printf"%.0f",$1*256*256*256+$2*256*256+$3*256+$4}'`
-        IPvalue=`echo $IP|awk -F"." '{printf"%.0f",$1*256*256*256+$2*256*256+$3*256+$4}'`
-        if [ "$IPvalue" -ge "$MIN" ] && [ "$IPvalue" -le "$MAX" ]; then
-            local is_exist=true
-            break
-        fi
-    done
-
-    if [[ ${is_exist} == true ]]; then
-        return 0
-    else
-        return 1
-    fi
-}
-
 Info_display_of_domain(){
     domainType=$1
 
@@ -250,7 +101,7 @@ get_input_server_name(){
         fi
         read -e -p "(默认: www.bing.com):" serverName
         [ -z "$serverName" ] && serverName="www.bing.com"
-        if ! get_ip_of_domain ${serverName}; then
+        if ! get_domain_ip ${serverName}; then
             echo
             echo -e "${Error} 请输入一个正确有效的域名."
             echo
@@ -299,6 +150,103 @@ get_input_wss_path(){
     done
 }
 
+is_add_random_header(){
+    while true
+    do
+        echo
+        echo -e "是否启用 random header(512b~16Kb)，以防止流量分析(rh)"
+        read -p "(默认: n) [y/n]: " yn
+        [ -z "${yn}" ] && yn="N"
+        case "${yn:0:1}" in
+            y|Y)
+                isEnable=enable
+                ;;
+            n|N)
+                isEnable=disable
+                ;;
+            *)
+                echo
+                echo -e "${Error} 输入有误，请重新输入!"
+                echo
+                continue
+                ;;
+        esac
+
+        echo
+        echo -e "${Red}  rh = ${isEnable}${suffix}"
+        echo
+        break
+    done
+}
+
+is_enable_padding_data(){
+    while true
+    do
+        echo
+        echo -e "是否启用 padding-data 模式，以防止流量分析(pd)"
+        read -p "(默认: n) [y/n]: " yn
+        [ -z "${yn}" ] && yn="N"
+        case "${yn:0:1}" in
+            y|Y)
+                isEnable=enable
+                ;;
+            n|N)
+                isEnable=disable
+                ;;
+            *)
+                echo
+                echo -e "${Error} 输入有误，请重新输入!"
+                echo
+                continue
+                ;;
+        esac
+
+        echo
+        echo -e "${Red}  pd = ${isEnable}${suffix}"
+        echo
+        break
+    done
+}
+
+is_enable_auth(){
+    while true
+    do
+        echo
+        echo -e "是否启用身份验证密码，以过滤扫描流量(auth)"
+        read -p "(默认: n) [y/n]: " yn
+        [ -z "${yn}" ] && yn="N"
+        case "${yn:0:1}" in
+            y|Y)
+                isEnable=enable
+                ;;
+            n|N)
+                isEnable=disable
+                ;;
+            *)
+                echo
+                echo -e "${Error} 输入有误，请重新输入!"
+                echo
+                continue
+                ;;
+        esac
+
+        echo
+        echo -e "${Red}  isEnableAuth = ${isEnable}${suffix}"
+        echo
+        break
+    done
+}
+
+get_input_auth_passwd(){
+    gen_random_str
+    echo -e "\n请输入身份验证密码"
+    read -e -p "(默认: ${ran_str8}):" auth
+    [ -z "${auth}" ] && auth=${ran_str8}
+    echo
+    echo -e "${Red}  auth = ${auth}${suffix}"
+    echo
+}
+
 check_port_for_simple_tls(){
     shadowsocksport=443
 
@@ -308,8 +256,31 @@ check_port_for_simple_tls(){
 }
 
 install_prepare_libev_simple_tls(){
-    transport_mode_menu
-    get_input_server_name
+    simple_tls_version
+    # v0.3.4
+    if [[ ${SimpleTlsVer} = "1" ]]; then
+        transport_mode_menu
+        get_input_server_name
+        is_add_random_header
+    fi
+
+    # v0.4.7
+    if [[ ${SimpleTlsVer} = "2" ]]; then
+        libev_simple_tls=1
+        get_input_server_name
+        is_enable_padding_data
+    fi
+
+    # LatestRelease
+    if [[ ${SimpleTlsVer} = "3" ]]; then
+        libev_simple_tls=1
+        get_input_server_name
+        is_enable_auth
+        if [[ ${isEnable} = enable ]]; then
+            get_input_auth_passwd
+        fi
+    fi
+
     check_port_for_simple_tls
 
     if [[ ${libev_simple_tls} = "1" ]]; then
@@ -318,12 +289,11 @@ install_prepare_libev_simple_tls(){
         fi
     elif [[ ${libev_simple_tls} = "2" ]]; then
         get_input_wss_path
-        check_port_for_simple_tls
 
         if [[ ${domainType} = DNS-Only ]]; then
             acme_get_certificate_by_force "${serverName}"
         elif [[ ${domainType} = CDN ]]; then
-            acme_get_certificate_by_api "${serverName}"
+            acme_get_certificate_by_api_or_manual "${serverName}"
         fi
     fi
 }
